@@ -345,6 +345,8 @@ audit_logs: list[Dict]                     # Logs de auditoría
 | Magic links | HMAC (itsdangerous) | Firma criptográfica con TTL |
 | Sesiones | secrets.token_urlsafe(32) | Tokens opacos aleatorios |
 
+**Nota**: Aunque la implementación actual de Magic links se basa en itsdangerous para agilizar el desarrollo, la mejora propuesta en el informe consiste en adoptar secrets.token_urlsafe, una opción técnicamente más sólida para este fin.
+
 ### Protecciones
 
 - **Anti-enumeración:** Respuestas genéricas en login y reseteo

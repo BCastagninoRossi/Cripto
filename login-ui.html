@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Login Seguro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in {
+            animation: fadeIn 0.3s ease-out;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+    <div id="app"></div>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8000';
+
+        // Estado de la aplicación
+        let state = {
+            view: 'login',
+            user: null,
+            loading: false,
+            message: { type: '', text: '' },
+            formData: {
+                username: '',
+                email: '',
+                password: '',
+                identifier: '',
+                code: '',
+                newPassword: '',
+                resetToken: ''
+            }
+        };
+
+        // Función para renderizar
+        function render() {
+            const app = document.getElementById('app');
+            app.innerHTML = `
+                <div class="max-w-md mx-auto pt-12 p-4">
+                    <!-- Header -->
+                    <div class="text-center mb-8">
+                        <div class="inline-flex items-center justify-center w-16 h-16 bg-indigo-600 rounded-full mb-4">
+                            <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                            </svg>
+                        </div>
+                        <h1 class="text-3xl font-bold text-gray-800">Sistema Seguro</h1>
+                        <p class="text-gray-600 mt-2">Autenticación con 2FA</p>
+                    </div>
+
+                    <!-- Mensajes -->
+                    ${state.message.text ? `
+                        <div class="mb-4 p-4 rounded-lg flex items-start gap-3 fade-in ${
+                            state.message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        }">
+                            <svg class="w-5 h-5 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                ${state.message.type === 'success' ? 
+                                    '<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>' :
+                                    '<path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>'
+                                }
+                            </svg>
+                            <span class="text-sm">${state.message.text}</span>
+                        </div>
+                    ` : ''}
+
+                    <!-- Card principal -->
+                    <div class="bg-white rounded-2xl shadow-xl p-8 fade-in">
+                        ${renderView()}
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="text-center mt-8 text-sm text-gray-600">
+                        <p>PoC de Sistema Seguro - Criptografía y Ciberseguridad</p>
+                    </div>
+                </div>
+            `;
+
+            attachEventListeners();
+        }
+
+        function renderView() {
+            switch(state.view) {
+                case 'login': return renderLogin();
+                case 'register': return renderRegister();
+                case 'verify-otp': return renderVerifyOTP();
+                case 'reset-request': return renderResetRequest();
+                case 'reset-verify': return renderResetVerify();
+                case 'reset-complete': return renderResetComplete();
+                case 'dashboard': return renderDashboard();
+                default: return renderLogin();
+            }
+        }
+
+        function renderLogin() {
+            return `
+                <h2 class="text-2xl font-bold mb-6 text-gray-800">Iniciar Sesión</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Usuario o Email</label>
+                        <input type="text" id="identifier" value="${state.formData.identifier}"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            placeholder="alice" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Contraseña</label>
+                        <input type="password" id="password" value="${state.formData.password}"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            placeholder="••••••••" required>
+                    </div>
+                    <button onclick="handleLogin()" ${state.loading ? 'disabled' : ''}
+                        class="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition disabled:opacity-50">
+                        ${state.loading ? 'Verificando...' : 'Continuar'}
+                    </button>
+                </div>
+                <div class="mt-6 text-center space-y-2">
+                    <button onclick="changeView('register')" class="text-indigo-600 hover:underline text-sm">
+                        Crear cuenta nueva
+                    </button>
+                    <br>
+                    <button onclick="changeView('reset-request')" class="text-gray-600 hover:underline text-sm">
+                        ¿Olvidaste tu contraseña?
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderRegister() {
+            return `
+                <h2 class="text-2xl font-bold mb-6 text-gray-800">Crear Cuenta</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Usuario</label>
+                        <input type="text" id="username" value="${state.formData.username}"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                            minlength="3" maxlength="30" required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                        <input type="email" id="email" value="${state.formData.email}"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                            required>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Contraseña</label>
+                        <input type="password" id="password" value="${state.formData.password}"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                            minlength="8" maxlength="64" required>
+                        <p class="text-xs text-gray-500 mt-1">Mínimo 8 caracteres</p>
+                    </div>
+                    <button onclick="handleRegister()" ${state.loading ? 'disabled' : ''}
+                        class="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition disabled:opacity-50">
+                        ${state.loading ? 'Registrando...' : 'Registrar'}
+                    </button>
+                </div>
+                <div class="mt-6 text-center">
+                    <button onclick="changeView('login')" class="text-indigo-600 hover:underline text-sm">
+                        ¿Ya tienes cuenta? Inicia sesión
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderVerifyOTP() {
+            return `
+                <h2 class="text-2xl font-bold mb-6 text-gray-800">Verificación 2FA</h2>
+                <p class="text-gray-600 mb-6 text-sm">
+                    Ingresa el código de 6 dígitos que aparece en la terminal del servidor.
+                </p>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Código OTP</label>
+                        <input type="text" id="code" value="${state.formData.code}"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-center text-2xl tracking-widest"
+                            maxlength="6" placeholder="000000" required>
+                    </div>
+                    <button onclick="handleVerifyOTP()" ${state.loading ? 'disabled' : ''}
+                        class="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition disabled:opacity-50">
+                        ${state.loading ? 'Verificando...' : 'Verificar'}
+                    </button>
+                </div>
+                <div class="mt-6 text-center">
+                    <button onclick="changeView('login')" class="text-gray-600 hover:underline text-sm">
+                        Volver al inicio
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderResetRequest() {
+            return `
+                <h2 class="text-2xl font-bold mb-6 text-gray-800">Restablecer Contraseña</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                        <input type="email" id="email" value="${state.formData.email}"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                            required>
+                    </div>
+                    <button onclick="handleResetRequest()" ${state.loading ? 'disabled' : ''}
+                        class="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition disabled:opacity-50">
+                        ${state.loading ? 'Enviando...' : 'Enviar código'}
+                    </button>
+                </div>
+                <div class="mt-6 text-center">
+                    <button onclick="changeView('login')" class="text-indigo-600 hover:underline text-sm">
+                        Volver al inicio
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderResetVerify() {
+            return `
+                <h2 class="text-2xl font-bold mb-6 text-gray-800">Verificar Código</h2>
+                <p class="text-gray-600 mb-6 text-sm">
+                    Ingresa el código alfanumérico de 8 caracteres que aparece en la terminal.
+                </p>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Código</label>
+                        <input type="text" id="code" value="${state.formData.code}"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-center text-xl tracking-wider"
+                            maxlength="8" required>
+                    </div>
+                    <button onclick="handleResetVerify()" ${state.loading ? 'disabled' : ''}
+                        class="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition disabled:opacity-50">
+                        ${state.loading ? 'Verificando...' : 'Verificar'}
+                    </button>
+                </div>
+                <div class="mt-6 text-center">
+                    <button onclick="changeView('login')" class="text-gray-600 hover:underline text-sm">
+                        Volver al inicio
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderResetComplete() {
+            return `
+                <h2 class="text-2xl font-bold mb-6 text-gray-800">Nueva Contraseña</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Nueva Contraseña</label>
+                        <input type="password" id="newPassword" value="${state.formData.newPassword}"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                            minlength="8" maxlength="64" required>
+                        <p class="text-xs text-gray-500 mt-1">Mínimo 8 caracteres</p>
+                    </div>
+                    <button onclick="handleResetComplete()" ${state.loading ? 'disabled' : ''}
+                        class="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition disabled:opacity-50">
+                        ${state.loading ? 'Guardando...' : 'Restablecer contraseña'}
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderDashboard() {
+            return `
+                <h2 class="text-2xl font-bold mb-6 text-gray-800">Panel de Usuario</h2>
+                <div class="space-y-4 mb-6">
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <p class="text-sm text-gray-600">Usuario</p>
+                        <p class="font-semibold text-gray-800">${state.user.username}</p>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <p class="text-sm text-gray-600">Estado</p>
+                        <p class="font-semibold text-green-600">${state.user.status}</p>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <p class="text-sm text-gray-600">Último acceso</p>
+                        <p class="font-semibold text-gray-800">
+                            ${state.user.last_login_at ? new Date(state.user.last_login_at).toLocaleString('es-AR') : 'N/A'}
+                        </p>
+                    </div>
+                </div>
+                <button onclick="handleLogout()"
+                    class="w-full bg-red-600 text-white py-3 rounded-lg font-semibold hover:bg-red-700 transition">
+                    Cerrar Sesión
+                </button>
+            `;
+        }
+
+        // Funciones de manejo
+        function changeView(newView) {
+            state.view = newView;
+            state.formData.code = '';
+            render();
+        }
+
+        function showMessage(type, text) {
+            state.message = { type, text };
+            render();
+            setTimeout(() => {
+                state.message = { type: '', text: '' };
+                render();
+            }, 5000);
+        }
+
+        function attachEventListeners() {
+            const inputs = ['identifier', 'password', 'username', 'email', 'code', 'newPassword'];
+            inputs.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.addEventListener('input', (e) => {
+                        state.formData[id] = e.target.value;
+                    });
+                }
+            });
+        }
+
+        async function handleRegister() {
+            state.loading = true;
+            render();
+            try {
+                const res = await fetch(`${API_BASE}/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: state.formData.username,
+                        email: state.formData.email,
+                        password: state.formData.password
+                    })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showMessage('success', 'Registro exitoso. Revisa la terminal del servidor para el link de verificación.');
+                    state.view = 'login';
+                    state.formData = { ...state.formData, username: '', password: '' };
+                } else {
+                    showMessage('error', data.detail || 'Error en el registro');
+                }
+            } catch (err) {
+                showMessage('error', 'Error de conexión con el servidor');
+            }
+            state.loading = false;
+            render();
+        }
+
+        async function handleLogin() {
+            state.loading = true;
+            render();
+            try {
+                const res = await fetch(`${API_BASE}/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        identifier: state.formData.identifier,
+                        password: state.formData.password
+                    })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showMessage('success', 'Código OTP enviado. Revisa la terminal del servidor.');
+                    state.view = 'verify-otp';
+                } else {
+                    showMessage('error', data.detail || 'Credenciales inválidas');
+                }
+            } catch (err) {
+                showMessage('error', 'Error de conexión con el servidor');
+            }
+            state.loading = false;
+            render();
+        }
+
+        async function handleVerifyOTP() {
+            state.loading = true;
+            render();
+            try {
+                const res = await fetch(`${API_BASE}/verify-otp`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        identifier: state.formData.identifier,
+                        code: state.formData.code
+                    })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showMessage('success', 'Inicio de sesión exitoso');
+                    await checkSession();
+                } else {
+                    showMessage('error', data.detail || 'Código inválido');
+                }
+            } catch (err) {
+                showMessage('error', 'Error de conexión con el servidor');
+            }
+            state.loading = false;
+            render();
+        }
+
+        async function handleResetRequest() {
+            state.loading = true;
+            render();
+            try {
+                const res = await fetch(`${API_BASE}/password-reset/request`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: state.formData.email })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showMessage('success', data.message + ' Revisa la terminal del servidor.');
+                    state.view = 'reset-verify';
+                }
+            } catch (err) {
+                showMessage('error', 'Error de conexión con el servidor');
+            }
+            state.loading = false;
+            render();
+        }
+
+        async function handleResetVerify() {
+            state.loading = true;
+            render();
+            try {
+                const res = await fetch(`${API_BASE}/password-reset/verify`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: state.formData.email,
+                        code: state.formData.code
+                    })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    state.formData.resetToken = data.reset_token;
+                    showMessage('success', 'Código verificado. Establece tu nueva contraseña.');
+                    state.view = 'reset-complete';
+                } else {
+                    showMessage('error', data.detail || 'Código inválido');
+                }
+            } catch (err) {
+                showMessage('error', 'Error de conexión con el servidor');
+            }
+            state.loading = false;
+            render();
+        }
+
+        async function handleResetComplete() {
+            state.loading = true;
+            render();
+            try {
+                const res = await fetch(`${API_BASE}/password-reset/complete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        reset_token: state.formData.resetToken,
+                        new_password: state.formData.newPassword
+                    })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showMessage('success', 'Contraseña restablecida. Inicia sesión nuevamente.');
+                    state.view = 'login';
+                    state.formData = { ...state.formData, password: '', newPassword: '', resetToken: '', code: '' };
+                } else {
+                    showMessage('error', data.detail || 'Error al restablecer');
+                }
+            } catch (err) {
+                showMessage('error', 'Error de conexión con el servidor');
+            }
+            state.loading = false;
+            render();
+        }
+
+        async function handleLogout() {
+            try {
+                await fetch(`${API_BASE}/logout`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                state.user = null;
+                state.view = 'login';
+                showMessage('success', 'Sesión cerrada correctamente');
+            } catch (err) {
+                showMessage('error', 'Error al cerrar sesión');
+            }
+        }
+
+        async function checkSession() {
+            try {
+                const res = await fetch(`${API_BASE}/me`, {
+                    credentials: 'include'
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    state.user = data.user;
+                    state.view = 'dashboard';
+                    render();
+                }
+            } catch (e) {
+                // No hay sesión activa
+            }
+        }
+
+        // Inicializar
+        checkSession();
+        render();
+    </script>
+</body>
+</html>

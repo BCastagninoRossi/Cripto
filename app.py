@@ -10,8 +10,17 @@ import hashlib
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from argon2 import PasswordHasher
 import bcrypt
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="Mock Secure Login System")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://127.0.0.1:5500", "http://localhost:5500", "null"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # =========================
 # CONFIGURACIÓN BÁSICA
